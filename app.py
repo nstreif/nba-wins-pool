@@ -45,8 +45,8 @@ def fetch_standings_for_date(date_str: str) -> pd.DataFrame:
         cutoff = datetime.fromisoformat(date_str)
         games = games[games['GAME_DATE'] <= cutoff]
 
-        # Filter out preseason and playoffs
-        games = games[games['SEASON_TYPE'] == "Regular Season"]
+        # ✅ Filter out preseason and playoffs by GAME_ID prefix
+        games = games[games['GAME_ID'].astype(str).str.startswith("002")]
 
         # Determine winners
         games['WINNER'] = games.apply(lambda x: x['TEAM_NAME'] if x['WL'] == 'W' else None, axis=1)
@@ -60,7 +60,6 @@ def fetch_standings_for_date(date_str: str) -> pd.DataFrame:
     except Exception as e:
         st.error(f"Error fetching standings for {date_str}: {e}")
         return pd.DataFrame(columns=['team', 'wins'])
-
 
 def calculate_totals(df: pd.DataFrame) -> pd.Series:
     """Sum total wins for each participant based on selected teams."""
