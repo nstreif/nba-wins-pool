@@ -90,8 +90,6 @@ def main():
     if os.path.isfile(BANNER_PATH):
         st.image(BANNER_PATH, use_container_width=True)
 
-    st.title("🏀 NBA Wins Pool Tracker 2025")
-
     today = datetime.today()
     end_date = today.date()
 
