@@ -2,7 +2,8 @@
 # coding: utf-8
 """
 Streamlit app for fetching NBA standings and displaying participant win totals.
-Uses the official nba_api to get live standings from NBA Stats.
+Calculates standings dynamically from game results (regular season only).
+No stored files — real computed daily data.
 """
 
 from datetime import datetime, timedelta
@@ -10,13 +11,14 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 import os
-from nba_api.stats.endpoints import leaguestandings
+from nba_api.stats.endpoints import leaguegamefinder
 
 # ---------------------------------------------------------------------------
 # CONFIGURATION
 # ---------------------------------------------------------------------------
 
 BANNER_PATH = "banner.png"
+CURRENT_SEASON = "2025-26"
 
 PARTICIPANT_TEAMS = {
     "Zack": ["Cavaliers", "Mavericks", "Pistons", "Hornets"],
@@ -32,18 +34,31 @@ PARTICIPANT_TEAMS = {
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=3600)
-def fetch_standings() -> pd.DataFrame:
+def fetch_standings_for_date(date_str: str) -> pd.DataFrame:
     """
-    Fetch live NBA standings using nba_api.
-    Returns a DataFrame with columns: team, wins.
+    Compute NBA standings as of a given date using leaguegamefinder.
+    Filters to 2025-26 regular season games up to the provided date.
     """
     try:
-        data = leaguestandings.LeagueStandings().get_data_frames()[0]
-        df = data[['TeamName', 'WINS']]
-        df.rename(columns={'TeamName': 'team', 'WINS': 'wins'}, inplace=True)
-        return df
+        games = leaguegamefinder.LeagueGameFinder(season_nullable=CURRENT_SEASON).get_data_frames()[0]
+        games['GAME_DATE'] = pd.to_datetime(games['GAME_DATE'])
+        cutoff = datetime.fromisoformat(date_str)
+        games = games[games['GAME_DATE'] <= cutoff]
+
+        # Filter out preseason and playoffs
+        games = games[games['SEASON_TYPE'] == "Regular Season"]
+
+        # Determine winners
+        games['WINNER'] = games.apply(lambda x: x['TEAM_NAME'] if x['WL'] == 'W' else None, axis=1)
+
+        # Count wins per team
+        wins = games['WINNER'].value_counts().reset_index()
+        wins.columns = ['team', 'wins']
+
+        return wins.sort_values(by='wins', ascending=False).reset_index(drop=True)
+
     except Exception as e:
-        st.error(f"Error fetching standings: {e}")
+        st.error(f"Error fetching standings for {date_str}: {e}")
         return pd.DataFrame(columns=['team', 'wins'])
 
 
@@ -58,7 +73,7 @@ def calculate_totals(df: pd.DataFrame) -> pd.Series:
 
 @st.cache_data(ttl=3600)
 def fetch_history(start_date: str, end_date: str) -> pd.DataFrame:
-    """Simulate historical data by re-fetching daily standings."""
+    """Fetch historical participant totals by recomputing standings for each date."""
     start = datetime.fromisoformat(start_date).date()
     end = datetime.fromisoformat(end_date).date()
     days = (end - start).days + 1
@@ -68,7 +83,7 @@ def fetch_history(start_date: str, end_date: str) -> pd.DataFrame:
     for i in range(days):
         progress_bar.progress((i + 1) / days)
         date_str = (start + timedelta(days=i)).isoformat()
-        standings = fetch_standings()
+        standings = fetch_standings_for_date(date_str)
         if standings.empty:
             continue
         totals = calculate_totals(standings)
@@ -90,14 +105,16 @@ def main():
     if os.path.isfile(BANNER_PATH):
         st.image(BANNER_PATH, use_container_width=True)
 
+    st.title("🏀 Chill and Cool Guys NBA Wins Pool")
+
     today = datetime.today()
     end_date = today.date()
 
-    with st.spinner("Fetching current NBA standings..."):
-        standings_df = fetch_standings()
+    with st.spinner("Calculating current NBA standings..."):
+        standings_df = fetch_standings_for_date(end_date.isoformat())
 
     if standings_df.empty:
-        st.warning("No standings data available.")
+        st.warning("No standings data available yet for this season.")
         return
 
     totals = calculate_totals(standings_df)
@@ -130,7 +147,7 @@ def main():
     else:
         start_date = (today - timedelta(days=30)).date()
 
-    with st.spinner("Fetching historical data..."):
+    with st.spinner("Recomputing standings for each day..."):
         history = fetch_history(start_date.isoformat(), end_date.isoformat())
 
     if not history.empty:
