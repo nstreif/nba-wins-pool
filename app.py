@@ -104,8 +104,6 @@ def main():
     if os.path.isfile(BANNER_PATH):
         st.image(BANNER_PATH, use_container_width=True)
 
-    st.title("🏀 Chill and Cool Guys NBA Wins Pool")
-
     today = datetime.today()
     end_date = today.date()
 
