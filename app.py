@@ -136,7 +136,7 @@ def main():
         "Select time range:",
         ["Past 30 Days", "Past 14 Days", "Past Week"],
         horizontal=True,
-        index=0
+        index=1
     )
 
     if time_range == "Past Week":
